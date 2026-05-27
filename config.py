@@ -1,51 +1,115 @@
+# config.py
+
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 APP_TITLE = "Lane Change Data Analysis Dashboard"
+
 BASIC_AUTH_ENABLED = True
 BASIC_AUTH_USERNAME = os.getenv("LANE_DASH_USERNAME", "lc_experiments")
 BASIC_AUTH_PASSWORD = os.getenv("LANE_DASH_PASSWORD", "visualizeplots")
+
 RUN_MODE = os.getenv("LANE_DASH_RUN_MODE", "local").strip().lower()
+
 LOCAL_PORT = int(os.getenv("LANE_DASH_LOCAL_PORT", "8051"))
 SHARE_PORT = int(os.getenv("LANE_DASH_SHARE_PORT", "8050"))
+
 FIGURE_TEMPLATE = "plotly_white"
+
 DEFAULT_HEIGHT = 360
 COMBINED_HEIGHT_PER_PLOT = 360
+
 DEFAULT_MA_WINDOW = 21
+
 WINDOW_PRE_EVENT_SEC = 5
 WINDOW_POST_EVENT_SEC = 5
+
 OBLIQUE_REFERENCE_SPEED_MPS = 40.0 * 0.44704
 
-# Paths: update these to your machine.
+
+# =========================================================
+# GLOBUS CONFIG
+# =========================================================
+
+GLOBUS_CLIENT_ID = os.getenv("GLOBUS_CLIENT_ID")
+GLOBUS_CLIENT_SECRET = os.getenv("GLOBUS_CLIENT_SECRET")
+GLOBUS_ENDPOINT_ID = os.getenv("GLOBUS_ENDPOINT_ID")
+
+# Example:
+# /LaneChangingData
+GLOBUS_BASE_PATH = os.getenv(
+    "GLOBUS_BASE_PATH",
+    "/LaneChangingData"
+)
+
+# Local cache directory on Render
+CACHE_DIR = os.getenv(
+    "LANE_DASH_CACHE_DIR",
+    "/tmp/lane_dash_cache"
+)
+
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+# =========================================================
+# EXPERIMENT CONFIG
+# =========================================================
+
 EXPERIMENT_TYPE = "LC"
 EXPERIMENT_OPTIONS = ["LC", "FSD"]
-BASE_DIR = r"Z:\Abhinav\Research\Lane Changing\Data\NCSU LC Data\Processed Data"
 
 
 def get_experiment_paths(experiment_type):
-    experiment_root = os.path.join(BASE_DIR, f"{experiment_type} Experiments")
-    plot_root = os.path.join(experiment_root, "Plots")
+    experiment_root = f"{GLOBUS_BASE_PATH}/{experiment_type} Experiments"
+
+    plot_root = f"{experiment_root}/Plots"
+
     return {
         "experiment_root": experiment_root,
-        "merged_folder": os.path.join(experiment_root, "Output Files (With Common Ref)"),
+        "merged_folder": f"{experiment_root}/Output Files (With Common Ref)",
         "plot_root": plot_root,
-        "export_folder": os.path.join(plot_root, "Interactive Modular Dashboard"),
-        "event_file_path": os.path.join(experiment_root, "Supporting Files", "Filtered Report.xlsx"),
-        "verification_event_file_path": os.path.join(experiment_root, "Supporting Files", "Filtered Report_F1_F2_dec_init_manual_verification.xlsx"),
-        "lc_smoothed_event_file_path": os.path.join(experiment_root, "Supporting Files", "Filtered Report with Peak Trace Mean1Sec Smoothed LC Times.xlsx"),
+        "export_folder": f"{plot_root}/Interactive Modular Dashboard",
+        "event_file_path": f"{experiment_root}/Supporting Files/Filtered Report.xlsx",
+        "verification_event_file_path": f"{experiment_root}/Supporting Files/Filtered Report_F1_F2_dec_init_manual_verification.xlsx",
+        "lc_smoothed_event_file_path": f"{experiment_root}/Supporting Files/Filtered Report with Peak Trace Mean1Sec Smoothed LC Times.xlsx",
+
         "follower_decel_detection_file_path": (
-            r"Z:\Abhinav\Research\Lane Changing\Analysis\Follower Behavior\Slope Regression Braking AutoModeMinus2 to LCCrossPlus10 ManualGreyDotted ThresholdBandText010_015_025\AD-ACC_FilteredReport_SlopeReg1s_Braking_AutoMode_to_LCCrossPlus10.xlsx"
+            "/Analysis/Follower Behavior/"
+            "Slope Regression Braking AutoModeMinus2 to "
+            "LCCrossPlus10 ManualGreyDotted ThresholdBandText010_015_025/"
+            "AD-ACC_FilteredReport_SlopeReg1s_Braking_AutoMode_to_LCCrossPlus10.xlsx"
             if str(experiment_type).upper() == "LC"
-            else r"Z:\Abhinav\Research\Lane Changing\Analysis\Follower Behavior\Slope Regression Braking AutoModeMinus2 to LCCrossPlus10 ManualGreyDotted ThresholdBandText010_015_025\AD-AD_FilteredReport_SlopeReg1s_Braking_AutoMode_to_LCCrossPlus10.xlsx"
+            else
+            "/Analysis/Follower Behavior/"
+            "Slope Regression Braking AutoModeMinus2 to "
+            "LCCrossPlus10 ManualGreyDotted ThresholdBandText010_015_025/"
+            "AD-AD_FilteredReport_SlopeReg1s_Braking_AutoMode_to_LCCrossPlus10.xlsx"
         ),
-        "follower_profile_detection_file_path": os.path.join(experiment_root, "Supporting Files", "Filtered Report_FollowerDecelerationDetection_ProfileThresholdMethod.xlsx"),
-        "los_event_file_path": os.path.join(experiment_root, "Supporting Files", "Filtered Report_LOSDetection.xlsx"),
-        "lc_detection_file_path": os.path.join(experiment_root, "Supporting Files", "Filtered Report_LCStartDetection_SlopeRegressionMethod.xlsx"),
-        "lc_direct_detection_file_path": os.path.join(experiment_root, "Supporting Files", "Filtered Report with Peak Trace DirectThreshold LC Times.xlsx"),
-        "video_folder": os.path.join(experiment_root, "Videos_all"),
+
+        "follower_profile_detection_file_path":
+            f"{experiment_root}/Supporting Files/"
+            "Filtered Report_FollowerDecelerationDetection_ProfileThresholdMethod.xlsx",
+
+        "los_event_file_path":
+            f"{experiment_root}/Supporting Files/Filtered Report_LOSDetection.xlsx",
+
+        "lc_detection_file_path":
+            f"{experiment_root}/Supporting Files/"
+            "Filtered Report_LCStartDetection_SlopeRegressionMethod.xlsx",
+
+        "lc_direct_detection_file_path":
+            f"{experiment_root}/Supporting Files/"
+            "Filtered Report with Peak Trace DirectThreshold LC Times.xlsx",
+
+        "video_folder":
+            f"{experiment_root}/Videos_all",
     }
 
 
 DEFAULT_EXPERIMENT_PATHS = get_experiment_paths(EXPERIMENT_TYPE)
+
 EXPERIMENT_ROOT = DEFAULT_EXPERIMENT_PATHS["experiment_root"]
 MERGED_FOLDER = DEFAULT_EXPERIMENT_PATHS["merged_folder"]
 PLOT_ROOT = DEFAULT_EXPERIMENT_PATHS["plot_root"]

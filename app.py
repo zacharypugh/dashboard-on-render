@@ -39,6 +39,9 @@ from ui.layout import build_layout, plot_card
 from exports.html_export import export_trial_pngs
 from utils import clamp_range
 
+# --- Globus Integration ---
+from globus_storage import ensure_local, list_remote_dir, cache_path
+
 app = Dash(__name__, suppress_callback_exceptions=True)
 app.title = APP_TITLE
 server = app.server
@@ -125,7 +128,6 @@ def _display_filter_label(field, value):
     return value
 
 
-
 def _build_filter_options(case_index, field):
     values = sorted(
         {meta.get(field) for meta in case_index.values() if meta.get(field)},
@@ -136,20 +138,45 @@ def _build_filter_options(case_index, field):
 
 def build_case_registry(experiment_type):
     paths = get_experiment_paths(experiment_type)
+    
+    # 1) Cache supporting Excel files locally
+    local_paths = {}
+    for key, val in paths.items():
+        if val and key.endswith("_path"):
+            try:
+                local_paths[key] = ensure_local(val)
+            except Exception as e:
+                print(f"Failed to fetch {key} via Globus: {e}")
+                local_paths[key] = None
+        else:
+            local_paths[key] = val
+
+    # 2) Cache merged_folder items locally
+    local_merged = cache_path(paths["merged_folder"])
+    os.makedirs(local_merged, exist_ok=True)
+    try:
+        remote_items = list_remote_dir(paths["merged_folder"])
+        for item in remote_items:
+            if item.get("type") == "file":
+                ensure_local(f"{paths['merged_folder']}/{item['name']}")
+    except Exception as e:
+        print(f"Failed to sync remote merged_folder via Globus: {e}")
+
     try:
         cases, lookup = list_available_cases(
-            paths["merged_folder"],
-            paths["event_file_path"],
-            verification_event_file_path=paths.get("verification_event_file_path"),
-            follower_decel_detection_file_path=paths.get("follower_decel_detection_file_path"),
-            follower_profile_detection_file_path=paths.get("follower_profile_detection_file_path"),
-            los_event_file_path=paths.get("los_event_file_path"),
-            lc_detection_file_path=paths.get("lc_detection_file_path"),
-            lc_direct_detection_file_path=paths.get("lc_direct_detection_file_path"),
+            local_merged,
+            local_paths.get("event_file_path"),
+            verification_event_file_path=local_paths.get("verification_event_file_path"),
+            follower_decel_detection_file_path=local_paths.get("follower_decel_detection_file_path"),
+            follower_profile_detection_file_path=local_paths.get("follower_profile_detection_file_path"),
+            los_event_file_path=local_paths.get("los_event_file_path"),
+            lc_detection_file_path=local_paths.get("lc_detection_file_path"),
+            lc_direct_detection_file_path=local_paths.get("lc_direct_detection_file_path"),
         )
     except Exception as e:
         print(f"Failed to build case registry -> {e}")
         return {"case_index": {}, "report_lookup": {}, "case_options": [], "paths": paths}
+        
     cases = sorted(cases, key=lambda item: (natural_sort_key(item["case_name"]), natural_sort_key(item["file_name"])))
     for item in cases:
         item.update(_case_metadata_from_row(lookup[tuple(item["key"])]))
@@ -246,8 +273,9 @@ def get_video_uri(experiment_type, case_key):
     meta = registry["case_index"].get(case_key)
     if not meta:
         return ""
-    video_path = os.path.join(registry["paths"]["video_folder"], f"{meta['case_name']}.mp4")
-    return f"/video/{experiment_type}/{meta['case_name']}" if os.path.exists(video_path) else ""
+    # Assume the video exists remotely and skip local exists check 
+    # The caching logic handles the actual fetch when serving it.
+    return f"/video/{experiment_type}/{meta['case_name']}"
 
 
 @server.route("/video/<experiment_type>/<case_name>")
@@ -256,10 +284,15 @@ def serve_video(experiment_type, case_name):
     meta = registry["case_index"].get(case_name)
     if not meta:
         abort(404)
-    video_path = os.path.join(registry["paths"]["video_folder"], f"{meta['case_name']}.mp4")
-    if not os.path.exists(video_path):
+    remote_video_path = f"{registry['paths']['video_folder']}/{meta['case_name']}.mp4"
+    try:
+        local_video_path = ensure_local(remote_video_path)
+        if not os.path.exists(local_video_path):
+            abort(404)
+        return send_file(local_video_path, mimetype="video/mp4", conditional=True)
+    except Exception as e:
+        print(f"Failed to serve video via Globus: {e}")
         abort(404)
-    return send_file(video_path, mimetype="video/mp4", conditional=True)
 
 
 def compute_default_range(trial):
@@ -818,8 +851,6 @@ def update_summary(compare_mode, experiment_type, case_key, lc_detection_method,
     return build_summary_component(trial, safety_pairs)
 
 
-
-
 def _add_shifted_event_lines(fig, trial, visible_event_keys, prefix=None, y_level=1.0, row=None, color_override=None):
     lc_cross = trial.event_times.get("lc_cross_sec")
     if lc_cross is None or not np.isfinite(lc_cross):
@@ -949,7 +980,6 @@ def _add_shifted_lc_detection_bands(fig, trial, lc_detection_methods, lc_detecti
                 [("0.10 m/s", "direct__LC End Time @ 0.1"), ("0.15 m/s", "direct__LC End Time @ 0.15"), ("0.25 m/s", "direct__LC End Time @ 0.25")],
                 text_color, fill_color,
             )
-
 
 
 def _append_shifted_lateral_metric_trace(fig, trial, metric_key, label, color):
@@ -1378,11 +1408,16 @@ def export_visible_plots(n_clicks, experiment_type, case_key, lc_detection_metho
     trial = get_trial(experiment_type, case_key, lc_detection_method=lc_detection_method, follower_decel_method=follower_decel_method, follower_threshold_pairs=follower_threshold_pairs)
     if trial is None:
         return "Nothing exported"
+    
+    # Write exports to the local cache folder
     export_folder = get_registry(experiment_type)["paths"]["export_folder"]
+    local_export_folder = cache_path(export_folder)
+    os.makedirs(local_export_folder, exist_ok=True)
+    
     try:
         combined_path, individual_paths = export_trial_pngs(
             trial,
-            export_folder,
+            local_export_folder,
             visible_plots,
             longitudinal_pairs,
             safety_pairs,
@@ -1396,16 +1431,11 @@ def export_visible_plots(n_clicks, experiment_type, case_key, lc_detection_metho
         )
     except Exception as exc:
         return f"Export failed: {exc}"
-    return f"Exported {1 + len(individual_paths)} PNG plots to: {os.path.dirname(combined_path)}"
+    return f"Exported {1 + len(individual_paths)} PNG plots to locally cached export directory: {os.path.dirname(combined_path)}"
 
 
 if __name__ == "__main__":
-    import webbrowser
-    if RUN_MODE == "share":
-        from waitress import serve
-        webbrowser.open(f"http://127.0.0.1:{SHARE_PORT}/")
-        serve(server, host="0.0.0.0", port=SHARE_PORT)
-    else:
-        if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-            webbrowser.open(f"http://127.0.0.1:{LOCAL_PORT}/")
-        app.run(debug=True, host="127.0.0.1", port=LOCAL_PORT)
+    from waitress import serve
+
+    port = int(os.environ.get("PORT", 10000))
+    serve(server, host="0.0.0.0", port=port)
