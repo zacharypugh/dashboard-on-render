@@ -21,15 +21,16 @@ client = ConfidentialAppAuthClient(
     GLOBUS_CLIENT_SECRET
 )
 
-data_access_scope = f"urn:globus:auth:scope:transfer.api.globus.org:all[data_access[{GLOBUS_ENDPOINT_ID}]]"
-
-tokens = client.oauth2_client_credentials_tokens(
-    requested_scopes=data_access_scope
-)
+# data_access_scope = f"urn:globus:auth:scope:transfer.api.globus.org:all[data_access[{GLOBUS_ENDPOINT_ID}]]"
 
 # tokens = client.oauth2_client_credentials_tokens(
-#     requested_scopes=TransferScopes.all
+#     requested_scopes=data_access_scope
 # )
+
+print("--- DEBUG: VERIFYING CODE IS RUNNING WITH TRANSFER SCOPES ---")
+tokens = client.oauth2_client_credentials_tokens(
+    requested_scopes=TransferScopes.all
+)
 
 transfer_token = (
     tokens.by_resource_server["transfer.api.globus.org"]["access_token"]
