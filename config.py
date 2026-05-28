@@ -41,8 +41,8 @@ GLOBUS_ENDPOINT_ID = os.getenv("GLOBUS_ENDPOINT_ID")
 # /LaneChangingData
 GLOBUS_BASE_PATH = os.getenv(
     "GLOBUS_BASE_PATH",
-    "/LaneChangingData"
-)
+    ""
+).rstrip("/")
 
 # Local cache directory on Render
 CACHE_DIR = os.getenv(
@@ -62,7 +62,7 @@ EXPERIMENT_OPTIONS = ["LC", "FSD"]
 
 
 def get_experiment_paths(experiment_type):
-    experiment_root = f"{GLOBUS_BASE_PATH}/{experiment_type} Experiments"
+    experiment_root = f"{GLOBUS_BASE_PATH}{experiment_type} Experiments"
 
     plot_root = f"{experiment_root}/Plots"
 
